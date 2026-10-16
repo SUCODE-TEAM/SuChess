@@ -118,11 +118,21 @@ export default function App() {
       sounds.playVictory();
     };
 
-    multiplayer.onRemoteMove = ({ move }) => {
+    multiplayer.onRemoteMove = ({ move, fen: remoteFen }) => {
+      if (!move) return;
+      const moveObj = { from: move.from, to: move.to, promotion: move.promotion || 'q' };
+
       if (sceneManagerRef.current) {
         const isCapture = !!engine.chess.get(move.to);
         sceneManagerRef.current.animateMove(move.from, move.to, () => {
-          engine.chess.move(move);
+          try {
+            engine.chess.move(moveObj);
+          } catch (e) {
+            console.warn('[Multiplayer] Local move error, syncing with FEN:', e);
+          }
+          if (remoteFen) {
+            engine.chess.load(remoteFen);
+          }
           setFen(engine.fen());
 
           if (isCapture) sounds.playCapture();
@@ -131,7 +141,14 @@ export default function App() {
           checkGameOver();
         });
       } else {
-        engine.chess.move(move);
+        try {
+          engine.chess.move(moveObj);
+        } catch (e) {
+          console.warn('[Multiplayer] Local move error, syncing with FEN:', e);
+        }
+        if (remoteFen) {
+          engine.chess.load(remoteFen);
+        }
         setFen(engine.fen());
         checkGameOver();
       }

@@ -1,19 +1,31 @@
 // ============================================================
-//  MultiplayerClient for SuChesse
-//  Supports WebSocket Relay (LAN / Hotspot) & PeerJS WebRTC (Internet)
+//  MultiplayerClient for SuChesse (WebRTC P2P via PeerJS)
+//  Optimized for serverless hosting (Vercel, Netlify, etc.)
 // ============================================================
 
 import Peer from 'peerjs';
 
+// Public STUN servers for robust NAT traversal across WiFi and 4G/5G mobile networks
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  { urls: 'stun:openrelay.metered.ca:80' },
+];
+
 export class MultiplayerClient {
   constructor() {
-    this.ws = null;
     this.peer = null;
-    this.peerConn = null;
+    this.conn = null;
     this.roomCode = null;
     this.playerRole = null; // 'w' or 'b'
-    this.mode = 'idle'; // 'ws' or 'peer' or 'idle'
+    this.isHost = false;
+    this.heartbeatTimer = null;
 
+    // Event callbacks
     this.onRoomCreated = () => {};
     this.onJoinedSuccess = () => {};
     this.onOpponentJoined = () => {};
@@ -33,224 +45,265 @@ export class MultiplayerClient {
     return code;
   }
 
-  // Connect via WebSocket
+  getPeerIdForCode(code) {
+    return `suchess-p2p-${code.toLowerCase().trim()}`;
+  }
+
+  // Create Room as Host
   createRoom(customCode = null, color = 'w') {
+    this.disconnect();
+
     const code = customCode || this.generateRoomCode();
     this.roomCode = code;
     this.playerRole = color;
+    this.isHost = true;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws-chess`;
+    const hostPeerId = this.getPeerIdForCode(code);
 
     try {
-      this.ws = new WebSocket(wsUrl);
+      this.peer = new Peer(hostPeerId, {
+        config: {
+          iceServers: ICE_SERVERS,
+          sdpSemantics: 'unified-plan',
+        },
+      });
 
-      this.ws.onopen = () => {
-        this.mode = 'ws';
-        this.ws.send(
-          JSON.stringify({
-            type: 'CREATE_ROOM',
-            roomCode: this.roomCode,
-            color: this.playerRole,
-          })
-        );
-      };
+      this.peer.on('open', () => {
+        console.log('[Multiplayer Host] Room created with code:', code);
+        this.onRoomCreated({ roomCode: code, role: color });
+        this.startHeartbeat();
+      });
 
-      this.ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          this.handleServerMessage(msg);
-        } catch (err) {
-          console.error('WS parse error:', err);
+      this.peer.on('connection', (conn) => {
+        console.log('[Multiplayer Host] Incoming peer connection...');
+        this.conn = conn;
+
+        conn.on('open', () => {
+          console.log('[Multiplayer Host] DataChannel opened with guest!');
+          this.setupConnectionListeners(conn);
+
+          // Greet guest and assign roles
+          const guestRole = color === 'w' ? 'b' : 'w';
+          conn.send({
+            type: 'WELCOME',
+            roomCode: code,
+            role: guestRole,
+            hostRole: color,
+          });
+
+          this.onOpponentJoined({ opponentRole: guestRole });
+        });
+      });
+
+      this.peer.on('error', (err) => {
+        console.error('[Multiplayer Host] Peer error:', err);
+        if (err.type === 'unavailable-id') {
+          // If code is somehow taken, retry with a fresh code
+          console.log('[Multiplayer Host] ID taken, regenerating room code...');
+          this.createRoom(null, color);
+        } else {
+          this.onError('Gagal membuat ruangan: ' + (err.message || err.type));
         }
-      };
-
-      this.ws.onerror = () => {
-        console.warn('WebSocket failed, attempting PeerJS P2P fallback...');
-        this.fallbackToPeerHost(code, color);
-      };
-
-      this.ws.onclose = () => {
-        if (this.mode === 'ws') {
-          this.onOpponentLeft();
-        }
-      };
-    } catch {
-      this.fallbackToPeerHost(code, color);
+      });
+    } catch (err) {
+      console.error('[Multiplayer Host] Initialization error:', err);
+      this.onError('Gagal menginisialisasi koneksi P2P: ' + err.message);
     }
 
     return code;
   }
 
+  // Join Room as Guest
   joinRoom(code) {
-    this.roomCode = code.toUpperCase().trim();
+    this.disconnect();
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws-chess`;
+    const cleanCode = code.toUpperCase().trim();
+    this.roomCode = cleanCode;
+    this.playerRole = 'b';
+    this.isHost = false;
+
+    const hostPeerId = this.getPeerIdForCode(cleanCode);
 
     try {
-      this.ws = new WebSocket(wsUrl);
+      // Create guest peer with random ID
+      this.peer = new Peer(null, {
+        config: {
+          iceServers: ICE_SERVERS,
+          sdpSemantics: 'unified-plan',
+        },
+      });
 
-      this.ws.onopen = () => {
-        this.mode = 'ws';
-        this.ws.send(
-          JSON.stringify({
-            type: 'JOIN_ROOM',
-            roomCode: this.roomCode,
-          })
-        );
-      };
+      this.peer.on('open', (guestId) => {
+        console.log('[Multiplayer Guest] Connected to signaling, guest ID:', guestId);
+        console.log('[Multiplayer Guest] Connecting to host:', hostPeerId);
 
-      this.ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          this.handleServerMessage(msg);
-        } catch (err) {
-          console.error('WS parse error:', err);
+        const conn = this.peer.connect(hostPeerId, {
+          reliable: true,
+        });
+
+        this.conn = conn;
+
+        conn.on('open', () => {
+          console.log('[Multiplayer Guest] Connected to host DataChannel!');
+          this.setupConnectionListeners(conn);
+
+          // Send JOIN message to host
+          conn.send({
+            type: 'JOIN',
+            roomCode: cleanCode,
+          });
+
+          this.onJoinedSuccess({ roomCode: cleanCode, role: 'b' });
+          this.startHeartbeat();
+        });
+
+        conn.on('error', (err) => {
+          console.error('[Multiplayer Guest] Conn error:', err);
+          this.onError('Koneksi ke host terputus.');
+        });
+      });
+
+      this.peer.on('error', (err) => {
+        console.error('[Multiplayer Guest] Peer error:', err);
+        if (err.type === 'peer-unavailable') {
+          this.onError('Ruangan tidak ditemukan! Pastikan kode ruangan benar dan Host masih menunggu.');
+        } else {
+          this.onError('Gagal bergabung ke ruangan: ' + (err.message || err.type));
         }
-      };
-
-      this.ws.onerror = () => {
-        console.warn('WebSocket failed, attempting PeerJS P2P join fallback...');
-        this.fallbackToPeerJoin(this.roomCode);
-      };
-    } catch {
-      this.fallbackToPeerJoin(this.roomCode);
+      });
+    } catch (err) {
+      console.error('[Multiplayer Guest] Initialization error:', err);
+      this.onError('Gagal menginisialisasi koneksi tamu: ' + err.message);
     }
   }
 
-  handleServerMessage(msg) {
-    switch (msg.type) {
-      case 'ROOM_CREATED':
-        this.onRoomCreated({ roomCode: msg.roomCode, role: msg.role });
-        break;
-      case 'JOINED_SUCCESS':
-        this.playerRole = msg.role;
-        this.onJoinedSuccess({ roomCode: msg.roomCode, role: msg.role });
-        break;
-      case 'OPPONENT_JOINED':
-        this.onOpponentJoined({ opponentRole: msg.opponentRole });
-        break;
+  setupConnectionListeners(conn) {
+    conn.on('data', (data) => {
+      this.handleIncomingData(data);
+    });
+
+    conn.on('close', () => {
+      console.log('[Multiplayer] Opponent disconnected.');
+      this.onOpponentLeft();
+    });
+  }
+
+  handleIncomingData(data) {
+    if (!data || typeof data !== 'object') return;
+
+    switch (data.type) {
+      case 'MOVE':
       case 'REMOTE_MOVE':
-        this.onRemoteMove({ move: msg.move, fen: msg.fen });
+        this.onRemoteMove({ move: data.move, fen: data.fen });
         break;
+
+      case 'RESIGN':
       case 'REMOTE_RESIGN':
-        this.onRemoteResign({ color: msg.color });
+        this.onRemoteResign({ color: data.color });
         break;
+
+      case 'RESTART':
       case 'REMOTE_RESTART':
         this.onRemoteRestart();
         break;
-      case 'OPPONENT_LEFT':
-        this.onOpponentLeft();
+
+      case 'JOIN':
+        if (this.isHost) {
+          const guestRole = this.playerRole === 'w' ? 'b' : 'w';
+          this.onOpponentJoined({ opponentRole: guestRole });
+          if (this.conn && this.conn.open) {
+            this.conn.send({
+              type: 'WELCOME',
+              roomCode: this.roomCode,
+              role: guestRole,
+              hostRole: this.playerRole,
+            });
+          }
+        }
         break;
-      case 'ERROR':
-        this.onError(msg.message);
+
+      case 'WELCOME':
+        if (!this.isHost) {
+          this.playerRole = data.role || 'b';
+          this.onJoinedSuccess({ roomCode: this.roomCode, role: this.playerRole });
+        }
         break;
+
+      case 'PING':
+        if (this.conn && this.conn.open) {
+          this.conn.send({ type: 'PONG' });
+        }
+        break;
+
+      case 'PONG':
+        // Heartbeat ACK
+        break;
+
       default:
+        console.log('[Multiplayer] Unhandled message:', data);
         break;
     }
   }
 
-  // PeerJS P2P fallback
-  fallbackToPeerHost(code, color) {
-    this.mode = 'peer';
-    const peerId = `suchesse-${code.toLowerCase()}`;
-    this.peer = new Peer(peerId);
-
-    this.peer.on('open', () => {
-      this.onRoomCreated({ roomCode: code, role: color });
-    });
-
-    this.peer.on('connection', (conn) => {
-      this.peerConn = conn;
-      this.playerRole = color;
-      this.onOpponentJoined({ opponentRole: color === 'w' ? 'b' : 'w' });
-
-      conn.on('data', (data) => {
-        this.handleServerMessage(data);
-      });
-
-      conn.on('close', () => {
-        this.onOpponentLeft();
-      });
-    });
-
-    this.peer.on('error', (err) => {
-      this.onError('Gagal membuat koneksi P2P: ' + err.type);
-    });
-  }
-
-  fallbackToPeerJoin(code) {
-    this.mode = 'peer';
-    const guestPeer = new Peer();
-
-    guestPeer.on('open', () => {
-      const hostId = `suchesse-${code.toLowerCase()}`;
-      const conn = guestPeer.connect(hostId);
-      this.peerConn = conn;
-
-      conn.on('open', () => {
-        this.playerRole = 'b';
-        this.onJoinedSuccess({ roomCode: code, role: 'b' });
-      });
-
-      conn.on('data', (data) => {
-        this.handleServerMessage(data);
-      });
-
-      conn.on('close', () => {
-        this.onOpponentLeft();
-      });
-    });
-
-    guestPeer.on('error', (err) => {
-      this.onError('Gagal bergabung ke ruangan: ' + err.type);
-    });
-  }
-
   sendMove(move, fen) {
-    const payload = { type: 'MOVE', roomCode: this.roomCode, move, fen };
-    if (this.mode === 'ws' && this.ws && this.ws.readyState === 1) {
-      this.ws.send(JSON.stringify(payload));
-    } else if (this.mode === 'peer' && this.peerConn && this.peerConn.open) {
-      this.peerConn.send(payload);
+    if (this.conn && this.conn.open) {
+      this.conn.send({
+        type: 'MOVE',
+        roomCode: this.roomCode,
+        move,
+        fen,
+      });
     }
   }
 
   sendResign(color) {
-    const payload = { type: 'RESIGN', roomCode: this.roomCode, color };
-    if (this.mode === 'ws' && this.ws && this.ws.readyState === 1) {
-      this.ws.send(JSON.stringify(payload));
-    } else if (this.mode === 'peer' && this.peerConn && this.peerConn.open) {
-      this.peerConn.send(payload);
+    if (this.conn && this.conn.open) {
+      this.conn.send({
+        type: 'RESIGN',
+        roomCode: this.roomCode,
+        color: color || this.playerRole,
+      });
     }
   }
 
   sendRestart() {
-    const payload = { type: 'RESTART', roomCode: this.roomCode };
-    if (this.mode === 'ws' && this.ws && this.ws.readyState === 1) {
-      this.ws.send(JSON.stringify(payload));
-    } else if (this.mode === 'peer' && this.peerConn && this.peerConn.open) {
-      this.peerConn.send(payload);
+    if (this.conn && this.conn.open) {
+      this.conn.send({
+        type: 'RESTART',
+        roomCode: this.roomCode,
+      });
     }
   }
 
+  startHeartbeat() {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = setInterval(() => {
+      if (this.conn && this.conn.open) {
+        this.conn.send({ type: 'PING' });
+      }
+    }, 8000);
+  }
+
   disconnect() {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
     }
-    if (this.peerConn) {
-      this.peerConn.close();
-      this.peerConn = null;
+    if (this.conn) {
+      try {
+        this.conn.close();
+      } catch (e) {}
+      this.conn = null;
     }
     if (this.peer) {
-      this.peer.destroy();
+      try {
+        this.peer.destroy();
+      } catch (e) {}
       this.peer = null;
     }
     this.roomCode = null;
     this.playerRole = null;
-    this.mode = 'idle';
+    this.isHost = false;
   }
 }
 
