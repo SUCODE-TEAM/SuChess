@@ -104,6 +104,15 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    headers: {
+      // Required for SharedArrayBuffer (Stockfish WASM multi-threading)
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
   publicDir: 'public',
+  optimizeDeps: {
+    // Don't try to optimize the Stockfish WASM files
+    exclude: ['@lichess-org/stockfish-web'],
+  },
 });

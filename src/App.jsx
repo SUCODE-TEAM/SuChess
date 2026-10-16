@@ -26,14 +26,11 @@ export default function App() {
 
   // Game Settings & Modes
   const [gameMode, setGameMode] = useState('pvp'); // 'pvp' | 'ai' | 'multiplayer'
+  const [playerColor, setPlayerColor] = useState('w'); // 'w' | 'b' (Player side choice)
   const [aiDifficulty, setAiDifficulty] = useState('medium');
   const [graphicQuality, setGraphicQuality] = useState('ultra');
   const [isMuted, setIsMuted] = useState(false);
   const [isFlipped, setIsFlipped] = useState(false);
-
-  // Timers (in seconds, 10 minutes default)
-  const [timers, setTimers] = useState({ w: 600, b: 600 });
-  const [isTimerRunning, setIsTimerRunning] = useState(true);
 
   // Modals
   const [pendingPromotion, setPendingPromotion] = useState(null);
@@ -150,8 +147,6 @@ export default function App() {
       engine.reset();
       setFen(engine.fen());
       setSelectedSquare(null);
-      setTimers({ w: 600, b: 600 });
-      setIsTimerRunning(true);
       setGameOverModal({ isOpen: false, winner: null, reason: null });
       sounds.playVictory();
     };
@@ -190,27 +185,6 @@ export default function App() {
     }
   }, [engine]);
 
-  // Countdown timer
-  useEffect(() => {
-    if (!isTimerRunning || engine.isGameOver()) return;
-
-    const interval = setInterval(() => {
-      const turn = engine.turn();
-      setTimers((prev) => {
-        const next = { ...prev, [turn]: Math.max(0, prev[turn] - 1) };
-        if (next[turn] === 0) {
-          setIsTimerRunning(false);
-          const winner = turn === 'w' ? 'b' : 'w';
-          setGameOverModal({ isOpen: true, winner, reason: 'timeout' });
-          sounds.playVictory();
-        }
-        return next;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isTimerRunning, engine.turn(), fen]);
-
   // Square Click & Piece Movement Logic
   const handleSquareClick = useCallback(
     (square) => {
@@ -218,8 +192,8 @@ export default function App() {
 
       const currentTurn = engine.turn();
 
-      // In AI mode: user is White, Black is AI
-      if (gameMode === 'ai' && currentTurn === 'b') return;
+      // In AI mode: user can only move their chosen side (playerColor)
+      if (gameMode === 'ai' && currentTurn !== playerColor) return;
 
       // In Multiplayer mode: you can only control your assigned color
       if (gameMode === 'multiplayer' && multiplayerState.isConnected) {
@@ -283,7 +257,7 @@ export default function App() {
       setSelectedSquare(null);
       selectedSquareRef.current = null;
     },
-    [engine, gameMode, multiplayerState]
+    [engine, gameMode, multiplayerState, playerColor]
   );
 
   // Execute Move
@@ -308,7 +282,8 @@ export default function App() {
             checkGameOver();
 
             // Trigger AI if playing vs AI
-            if (gameMode === 'ai' && engine.turn() === 'b' && !engine.isGameOver()) {
+            const aiColor = playerColor === 'w' ? 'b' : 'w';
+            if (gameMode === 'ai' && engine.turn() === aiColor && !engine.isGameOver()) {
               triggerAiMove();
             }
           }
@@ -321,10 +296,15 @@ export default function App() {
             multiplayer.sendMove(moveResult, engine.fen());
           }
           checkGameOver();
+
+          const aiColor = playerColor === 'w' ? 'b' : 'w';
+          if (gameMode === 'ai' && engine.turn() === aiColor && !engine.isGameOver()) {
+            triggerAiMove();
+          }
         }
       }
     },
-    [engine, gameMode, multiplayerState, checkGameOver]
+    [engine, gameMode, multiplayerState, playerColor, checkGameOver]
   );
 
   // AI Move Bot Execution (Powered exclusively by Stockfish 19 Engine - stockfishchess.org)
@@ -408,6 +388,44 @@ export default function App() {
     sounds.playMove();
   };
 
+  // Side / Color Selection (Putih / Hitam)
+  const handleSelectColor = (newColor) => {
+    setPlayerColor(newColor);
+    const flipped = newColor === 'b';
+    setIsFlipped(flipped);
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setCameraView(flipped ? 'black' : 'white');
+    }
+
+    // Reset game board for fresh start with selected side
+    if (gameMode === 'multiplayer' && multiplayerState.isConnected) {
+      multiplayer.sendRestart();
+    }
+    engine.reset();
+    setFen(engine.fen());
+    setSelectedSquare(null);
+    selectedSquareRef.current = null;
+    setGameOverModal({ isOpen: false, winner: null, reason: null });
+    sounds.playVictory();
+
+    // If Black chosen in AI mode, Stockfish opens as White!
+    if (gameMode === 'ai' && newColor === 'b') {
+      setTimeout(() => {
+        triggerAiMove();
+      }, 500);
+    }
+  };
+
+  // Game Mode Change
+  const handleSetGameMode = (mode) => {
+    setGameMode(mode);
+    if (mode === 'ai' && playerColor === 'b' && engine.turn() === 'w' && engine.history().length === 0) {
+      setTimeout(() => {
+        triggerAiMove();
+      }, 500);
+    }
+  };
+
   // New Game / Reset
   const handleNewGame = () => {
     if (gameMode === 'multiplayer' && multiplayerState.isConnected) {
@@ -417,10 +435,19 @@ export default function App() {
     setFen(engine.fen());
     setSelectedSquare(null);
     selectedSquareRef.current = null;
-    setTimers({ w: 600, b: 600 });
-    setIsTimerRunning(true);
     setGameOverModal({ isOpen: false, winner: null, reason: null });
     sounds.playVictory();
+
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setCameraView(playerColor === 'b' ? 'black' : 'white');
+    }
+
+    // If playing as Black against AI, AI moves first as White!
+    if (gameMode === 'ai' && playerColor === 'b') {
+      setTimeout(() => {
+        triggerAiMove();
+      }, 500);
+    }
   };
 
   // Resign
@@ -490,7 +517,9 @@ export default function App() {
         <TopBar
           gameEngine={engine}
           gameMode={gameMode}
-          setGameMode={setGameMode}
+          setGameMode={handleSetGameMode}
+          playerColor={playerColor}
+          onSelectColor={handleSelectColor}
           stockfishElo={stockfishElo}
           onOpenEloModal={() => setIsEloModalOpen(true)}
           onOpenReview={() => setIsReviewModalOpen(true)}
@@ -507,46 +536,60 @@ export default function App() {
 
         {/* Floating Side Panels */}
         <div className="panels-container">
-          {/* Left Player Panel: Opponent (Black) & Self (White) */}
+          {/* Left Player Panel: Opponent (Top) & Self (Bottom) */}
           <aside className="players-dock">
+            {/* Opponent Card (Top) */}
             <PlayerCard
-              color="b"
+              color={playerColor === 'w' ? 'b' : 'w'}
               name={
                 gameMode === 'ai'
-                  ? `Stockfish 19 (stockfishchess.org)`
+                  ? `Stockfish 19 (${stockfishElo} ELO)`
                   : gameMode === 'multiplayer'
-                  ? multiplayerState.role === 'b'
-                    ? 'Anda (Hitam)'
-                    : 'Lawan (Hitam)'
-                  : 'Pemain Hitam'
+                  ? multiplayerState.role === playerColor
+                    ? `Lawan (${playerColor === 'w' ? 'Hitam' : 'Putih'})`
+                    : `Anda (${playerColor === 'w' ? 'Hitam' : 'Putih'})`
+                  : playerColor === 'w'
+                  ? 'Pemain Hitam'
+                  : 'Pemain Putih'
               }
               rating={gameMode === 'ai' ? `${stockfishElo} ELO` : '1650'}
               isAI={gameMode === 'ai'}
-              isActiveTurn={engine.turn() === 'b' && !engine.isGameOver()}
-              timeLeft={timers.b}
-              capturedList={capturedData.capturedByBlack}
-              scoreDiff={capturedData.diffScore < 0 ? Math.abs(capturedData.diffScore) : 0}
+              isActiveTurn={engine.turn() === (playerColor === 'w' ? 'b' : 'w') && !engine.isGameOver()}
+              capturedList={playerColor === 'w' ? capturedData.capturedByBlack : capturedData.capturedByWhite}
+              scoreDiff={
+                playerColor === 'w'
+                  ? capturedData.diffScore < 0 ? Math.abs(capturedData.diffScore) : 0
+                  : capturedData.diffScore > 0 ? capturedData.diffScore : 0
+              }
             />
 
             <div className="versus-divider">
               <span className="vs-badge">VS</span>
             </div>
 
+            {/* Self Player Card (Bottom) */}
             <PlayerCard
-              color="w"
+              color={playerColor}
               name={
                 gameMode === 'multiplayer'
-                  ? multiplayerState.role === 'w'
-                    ? 'Anda (Putih)'
-                    : 'Lawan (Putih)'
-                  : 'Pemain Putih'
+                  ? multiplayerState.role === playerColor
+                    ? `Anda (${playerColor === 'w' ? 'Putih' : 'Hitam'})`
+                    : `Lawan (${playerColor === 'w' ? 'Putih' : 'Hitam'})`
+                  : gameMode === 'ai'
+                  ? `Anda (${playerColor === 'w' ? 'Putih' : 'Hitam'})`
+                  : playerColor === 'w'
+                  ? 'Pemain Putih'
+                  : 'Pemain Hitam'
               }
               rating="1680"
               isAI={false}
-              isActiveTurn={engine.turn() === 'w' && !engine.isGameOver()}
-              timeLeft={timers.w}
-              capturedList={capturedData.capturedByWhite}
-              scoreDiff={capturedData.diffScore > 0 ? capturedData.diffScore : 0}
+              isActiveTurn={engine.turn() === playerColor && !engine.isGameOver()}
+              capturedList={playerColor === 'w' ? capturedData.capturedByWhite : capturedData.capturedByBlack}
+              scoreDiff={
+                playerColor === 'w'
+                  ? capturedData.diffScore > 0 ? capturedData.diffScore : 0
+                  : capturedData.diffScore < 0 ? Math.abs(capturedData.diffScore) : 0
+              }
             />
           </aside>
 
@@ -602,8 +645,21 @@ export default function App() {
         {/* Post-Match Game Review & Analysis Modal */}
         <GameReviewModal
           isOpen={isReviewModalOpen}
-          onClose={() => setIsReviewModalOpen(false)}
+          onClose={() => {
+            setIsReviewModalOpen(false);
+            if (sceneManagerRef.current) {
+              sceneManagerRef.current.syncBoard(engine.board());
+            }
+          }}
           moveHistory={engine.chess.history({ verbose: true })}
+          onSelectMovePosition={(fen) => {
+            if (sceneManagerRef.current) {
+              try {
+                const temp = new Chess(fen);
+                sceneManagerRef.current.syncBoard(temp.board());
+              } catch (e) {}
+            }
+          }}
         />
       </div>
     </div>

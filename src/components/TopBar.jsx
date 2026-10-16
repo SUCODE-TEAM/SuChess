@@ -19,6 +19,8 @@ export const TopBar = ({
   gameEngine,
   gameMode,
   setGameMode,
+  playerColor = 'w',
+  onSelectColor,
   stockfishElo,
   onOpenEloModal,
   graphicQuality,
@@ -105,6 +107,30 @@ export const TopBar = ({
               <span className="btn-label font-bold gold-text">{stockfishElo} ELO</span>
             </button>
           )}
+        </div>
+
+        {/* Color Choice: White or Black */}
+        <div className="control-group">
+          <button
+            className={`mode-btn color-choice-btn ${playerColor === 'w' ? 'side-white' : 'side-black'}`}
+            onClick={() => onSelectColor && onSelectColor(playerColor === 'w' ? 'b' : 'w')}
+            title={`Bermain sebagai ${playerColor === 'w' ? 'PUTIH' : 'HITAM'} (Klik untuk beralih ke ${playerColor === 'w' ? 'Hitam' : 'Putih'})`}
+          >
+            <span
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                display: 'inline-block',
+                backgroundColor: playerColor === 'w' ? '#ffffff' : '#141414',
+                border: playerColor === 'w' ? '1.5px solid #d4af37' : '1.5px solid #888',
+                boxShadow: playerColor === 'w' ? '0 0 8px rgba(255,255,255,0.85)' : '0 0 6px rgba(0,0,0,0.9)',
+              }}
+            />
+            <span className="btn-label font-bold">
+              {playerColor === 'w' ? 'Kubu Putih' : 'Kubu Hitam'}
+            </span>
+          </button>
         </div>
 
         {/* Game Review Button */}

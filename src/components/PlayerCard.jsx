@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Bot, Clock } from 'lucide-react';
+import { User, Bot } from 'lucide-react';
 
 const PIECE_SYMBOLS = {
   p: '♟',
@@ -15,18 +15,10 @@ export const PlayerCard = ({
   rating,
   isAI,
   isActiveTurn,
-  timeLeft,
   capturedList,
   scoreDiff,
 }) => {
   const isWhite = color === 'w';
-
-  // Format time (mm:ss)
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
 
   return (
     <div className={`player-card ${isActiveTurn ? 'active-turn' : ''} ${isWhite ? 'card-white' : 'card-black'}`}>
@@ -43,12 +35,6 @@ export const PlayerCard = ({
             <span className="player-rating">{rating}</span>
           </div>
           <span className="player-role">{isWhite ? 'Ksatria Putih (Altar)' : 'Pangeran Kegelapan'}</span>
-        </div>
-
-        {/* Digital Clock */}
-        <div className={`player-clock ${isActiveTurn ? 'clock-active' : ''}`}>
-          <Clock size={14} className="clock-icon" />
-          <span className="clock-digits">{formatTime(timeLeft)}</span>
         </div>
       </div>
 

@@ -1,23 +1,49 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   Sparkles,
   Zap,
   CheckCircle,
+  Check,
+  BookOpen,
   AlertTriangle,
   AlertOctagon,
   XCircle,
   TrendingUp,
   ChevronLeft,
   ChevronRight,
-  Download,
+  ChevronFirst,
+  ChevronLast,
+  Play,
+  Pause,
+  RotateCcw,
   Copy,
-  Check,
-  RefreshCw,
   Cpu,
-  AlertCircle
+  BookMarked,
+  Layers,
+  Eye,
+  Award,
+  Bot
 } from 'lucide-react';
 import { stockfishService } from '../engine/StockfishService';
+import { ReviewChessBoard } from './ReviewChessBoard';
+import { EvalBar } from './EvalBar';
+import { EvalGraph } from './EvalGraph';
+
+// Move classification badge styles and labels
+const CLASSIFICATION_META = {
+  brilliant: { label: 'Brilian', symbol: '!!', color: '#26c2a3', bg: 'rgba(38, 194, 163, 0.15)', desc: 'Pengorbanan taktis spektakuler' },
+  great: { label: 'Hebat', symbol: '!', color: '#3ea3db', bg: 'rgba(62, 163, 219, 0.15)', desc: 'Menemukan satu-satunya penyelamatan' },
+  best: { label: 'Terbaik', symbol: '★', color: '#81b64c', bg: 'rgba(129, 182, 76, 0.15)', desc: 'Rekomendasi teratas Stockfish 19' },
+  excellent: { label: 'Sangat Bagus', symbol: '✓', color: '#81b64c', bg: 'rgba(129, 182, 76, 0.12)', desc: 'Mendekati langkah terbaik' },
+  good: { label: 'Bagus', symbol: '✓', color: '#97af7a', bg: 'rgba(151, 175, 122, 0.15)', desc: 'Menjaga posisi tetap stabil' },
+  book: { label: 'Langkah Buku', symbol: '📖', color: '#c38c4c', bg: 'rgba(195, 140, 76, 0.18)', desc: 'Teori pembukaan standar' },
+  inaccuracy: { label: 'Inakurasi', symbol: '?!', color: '#f7c631', bg: 'rgba(247, 198, 49, 0.15)', desc: 'Melepaskan inisiatif posisi' },
+  mistake: { label: 'Kesalahan', symbol: '?', color: '#e67e22', bg: 'rgba(230, 126, 34, 0.15)', desc: 'Menguntungkan posisi lawan' },
+  miss: { label: 'Melewatkan Kesempatan', symbol: '❌', color: '#db4141', bg: 'rgba(219, 65, 65, 0.18)', desc: 'Melewatkan peluang memakan perwira gratis lawan' },
+  missed_win: { label: 'Melewatkan Menang', symbol: '❌', color: '#db4141', bg: 'rgba(219, 65, 65, 0.18)', desc: 'Melewatkan peluang menang fatal' },
+  blunder: { label: 'Blunder', symbol: '??', color: '#fa412d', bg: 'rgba(250, 65, 45, 0.18)', desc: 'Kehilangan perwira atau keunggulan besar' },
+};
 
 export const GameReviewModal = ({
   isOpen,
@@ -30,12 +56,18 @@ export const GameReviewModal = ({
   const [analysisResult, setAnalysisResult] = useState(null);
   const [selectedMoveIndex, setSelectedMoveIndex] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [showBestMoveArrow, setShowBestMoveArrow] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [filterMode, setFilterMode] = useState('all'); // 'all' | 'key' | 'book'
+  const autoplayTimerRef = useRef(null);
 
+  // Trigger analysis on modal open
   useEffect(() => {
     if (isOpen && !analysisResult && moveHistory.length > 0) {
       startAnalysis();
     }
-  }, [isOpen]);
+  }, [isOpen, moveHistory.length]);
 
   const startAnalysis = async () => {
     if (moveHistory.length === 0) return;
@@ -48,7 +80,7 @@ export const GameReviewModal = ({
       });
       setAnalysisResult(result);
       if (result && result.moves.length > 0) {
-        setSelectedMoveIndex(result.moves.length - 1);
+        setSelectedMoveIndex(0);
       }
     } catch (err) {
       console.error('Error analyzing match:', err);
@@ -57,58 +89,67 @@ export const GameReviewModal = ({
     }
   };
 
+  // Keyboard navigation (Arrow keys, Space)
+  useEffect(() => {
+    if (!isOpen || !analysisResult || analysisResult.moves.length === 0) return;
+
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setSelectedMoveIndex((prev) => Math.max(0, prev - 1));
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setSelectedMoveIndex((prev) => Math.min(analysisResult.moves.length - 1, prev + 1));
+      } else if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        setIsPlaying((prev) => !prev);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        setSelectedMoveIndex(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        setSelectedMoveIndex(analysisResult.moves.length - 1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, analysisResult]);
+
+  // Autoplay functionality
+  useEffect(() => {
+    if (isPlaying && analysisResult && analysisResult.moves.length > 0) {
+      autoplayTimerRef.current = setInterval(() => {
+        setSelectedMoveIndex((prev) => {
+          if (prev >= analysisResult.moves.length - 1) {
+            setIsPlaying(false);
+            return prev;
+          }
+          return prev + 1;
+        });
+      }, 1600);
+    } else {
+      if (autoplayTimerRef.current) clearInterval(autoplayTimerRef.current);
+    }
+
+    return () => {
+      if (autoplayTimerRef.current) clearInterval(autoplayTimerRef.current);
+    };
+  }, [isPlaying, analysisResult]);
+
+  // Sync with 3D scene if callback provided
+  useEffect(() => {
+    if (analysisResult && analysisResult.moves[selectedMoveIndex] && onSelectMovePosition) {
+      onSelectMovePosition(analysisResult.moves[selectedMoveIndex].fenAfter);
+    }
+  }, [selectedMoveIndex, analysisResult]);
+
   if (!isOpen) return null;
 
   const currentMove = analysisResult?.moves?.[selectedMoveIndex];
-
-  const getClassificationBadge = (cls) => {
-    switch (cls) {
-      case 'brilliant':
-        return (
-          <span className="badge-review badge-brilliant">
-            <Sparkles size={13} /> Brilian (!!)
-          </span>
-        );
-      case 'great':
-        return (
-          <span className="badge-review badge-great">
-            <Zap size={13} /> Hebat (!)
-          </span>
-        );
-      case 'best':
-        return (
-          <span className="badge-review badge-best">
-            <CheckCircle size={13} /> Terbaik (★)
-          </span>
-        );
-      case 'good':
-        return (
-          <span className="badge-review badge-good">
-            <Check size={13} /> Bagus (✓)
-          </span>
-        );
-      case 'inaccuracy':
-        return (
-          <span className="badge-review badge-inaccuracy">
-            <AlertTriangle size={13} /> Inakurasi (?!)
-          </span>
-        );
-      case 'mistake':
-        return (
-          <span className="badge-review badge-mistake">
-            <AlertOctagon size={13} /> Kesalahan (?)
-          </span>
-        );
-      case 'blunder':
-        return (
-          <span className="badge-review badge-blunder">
-            <XCircle size={13} /> Blunder (??)
-          </span>
-        );
-      default:
-        return null;
-    }
-  };
+  const opening = analysisResult?.opening;
 
   const handleCopyPgn = () => {
     const pgn = moveHistory.reduce((acc, m, idx) => {
@@ -123,258 +164,344 @@ export const GameReviewModal = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Filter moves for the move list tab
+  const filteredMoves = (analysisResult?.moves || []).filter((m) => {
+    if (filterMode === 'book') return m.classification === 'book';
+    if (filterMode === 'key') {
+      return ['blunder', 'miss', 'missed_win', 'mistake', 'inaccuracy', 'brilliant', 'great'].includes(
+        m.classification
+      );
+    }
+    return true;
+  });
+
   return (
     <div className="modal-backdrop review-backdrop">
-      <div className="review-modal-card">
-        {/* Top Header */}
-        <div className="review-modal-header">
-          <div className="review-header-title">
-            <div className="review-icon-box">
-              <Cpu size={22} className="gold-text" />
+      <div className="chesscom-review-card">
+        {/* Top Header Bar */}
+        <div className="chesscom-top-header">
+          <div className="header-left-meta">
+            <div className="engine-brand-pill">
+              <Cpu size={16} className="gold-text" />
+              <span className="brand-name">Stockfish 19 NNUE</span>
+              <span className="brand-tag">Game Review</span>
             </div>
-            <div>
-              <h2 className="review-title">Analisis Pertandingan Stockfish 19</h2>
-              <p className="review-subtitle">
-                Review akurasi, klasifikasi langkah & rekomendasi engine kelas dunia
-              </p>
-            </div>
+
+            {opening && (
+              <div className="opening-eco-pill" title={opening.desc}>
+                <BookOpen size={14} className="eco-icon" />
+                <span className="eco-badge">{opening.eco}</span>
+                <span className="eco-name">{opening.name}</span>
+              </div>
+            )}
           </div>
-          <button className="modal-close-btn" onClick={onClose}>
-            <X size={20} />
-          </button>
+
+          {/* CAPS Accuracy Pills */}
+          {analysisResult && (
+            <div className="accuracy-caps-wrap">
+              <div className="acc-pill white-pill">
+                <span className="pill-dot white-dot" />
+                <span className="pill-player">Putih:</span>
+                <span className="pill-val">{analysisResult.whiteAccuracy}%</span>
+              </div>
+              <span className="acc-vs">vs</span>
+              <div className="acc-pill black-pill">
+                <span className="pill-dot black-dot" />
+                <span className="pill-player">Hitam:</span>
+                <span className="pill-val">{analysisResult.blackAccuracy}%</span>
+              </div>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="header-right-actions">
+            <button
+              className="review-tool-btn"
+              onClick={() => setIsFlipped(!isFlipped)}
+              title="Balik Papan (Flip View)"
+            >
+              <RotateCcw size={16} />
+              <span>Balik</span>
+            </button>
+            <button className="review-tool-btn" onClick={handleCopyPgn} title="Salin PGN">
+              {copied ? <Check size={16} className="text-green" /> : <Copy size={16} />}
+              <span>{copied ? 'Tersalin' : 'PGN'}</span>
+            </button>
+            <button className="review-close-icon-btn" onClick={onClose} title="Tutup Review">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
-        {/* Loading / Progress State */}
+        {/* Loading State */}
         {isAnalyzing && (
           <div className="review-loading-view">
             <div className="spinner-royal" />
-            <h3 className="gold-text">Stockfish sedang menganalisis setiap langkah...</h3>
-            <p className="text-muted">Mengevaluasi kelemahan taktis, pengorbanan & akurasi CAPS</p>
+            <h3 className="gold-text">Stockfish 19 sedang mengevaluasi permainan...</h3>
+            <p className="text-muted">
+              Menganalisis CAPS2, klasifikasi langkah brilian, teori pembukaan, dan panah taktis.
+            </p>
             <div className="progress-bar-wrap">
               <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
             </div>
-            <span className="progress-percent">{progress}%</span>
+            <span className="progress-percent">{progress}% selesai</span>
           </div>
         )}
 
         {/* Empty State */}
         {!isAnalyzing && (!moveHistory || moveHistory.length === 0) && (
           <div className="review-empty-view">
-            <AlertCircle size={40} className="text-muted" />
-            <p>Belum ada langkah yang dimainkan pada pertandingan ini.</p>
+            <AlertTriangle size={48} className="gold-text" />
+            <h3>Belum ada langkah dalam pertandingan ini.</h3>
+            <p className="text-muted">Mainkan beberapa langkah catur terlebih dahulu sebelum meninjau.</p>
           </div>
         )}
 
-        {/* Analysis Results View */}
+        {/* Main Review Studio: Board on Left, Coach & Breakdown on Right */}
         {!isAnalyzing && analysisResult && (
-          <div className="review-content-layout">
-            {/* Left Column: Accuracy & Breakdown */}
-            <div className="review-sidebar">
-              {/* Accuracy Card */}
-              <div className="accuracy-cards-row">
-                <div className="accuracy-card white-accuracy">
-                  <span className="acc-label">Akurasi Putih</span>
-                  <span className="acc-val">{analysisResult.whiteAccuracy}%</span>
-                  <div className="acc-bar">
-                    <div
-                      className="acc-bar-inner white-acc-fill"
-                      style={{ width: `${analysisResult.whiteAccuracy}%` }}
-                    />
-                  </div>
-                </div>
+          <div className="chesscom-studio-body">
+            {/* LEFT: Chess Board, Eval Bar, Graph, and Board Controls */}
+            <div className="studio-board-column">
+              {/* Board + Eval Bar Row */}
+              <div className="board-and-eval-row">
+                {/* Vertical Evaluation Bar */}
+                <EvalBar
+                  whiteAdvantage={currentMove?.whiteAdvantage || 0}
+                  isFlipped={isFlipped}
+                />
 
-                <div className="accuracy-card black-accuracy">
-                  <span className="acc-label">Akurasi Hitam</span>
-                  <span className="acc-val">{analysisResult.blackAccuracy}%</span>
-                  <div className="acc-bar">
-                    <div
-                      className="acc-bar-inner black-acc-fill"
-                      style={{ width: `${analysisResult.blackAccuracy}%` }}
-                    />
-                  </div>
-                </div>
+                {/* 2D Interactive Chessboard with SVG Arrows & Badges */}
+                <ReviewChessBoard
+                  fen={currentMove?.fenAfter || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'}
+                  playedMove={currentMove}
+                  bestMove={
+                    currentMove && currentMove.bestMoveFrom && currentMove.bestMoveTo
+                      ? { from: currentMove.bestMoveFrom, to: currentMove.bestMoveTo }
+                      : null
+                  }
+                  showBestMove={showBestMoveArrow}
+                  isFlipped={isFlipped}
+                />
               </div>
 
-              {/* Move Breakdown Table */}
-              <div className="stats-breakdown-card">
-                <h4 className="breakdown-title">Klasifikasi Langkah</h4>
-                <div className="breakdown-table">
-                  <div className="breakdown-row breakdown-header">
-                    <span>Kategori</span>
-                    <span className="text-center">Putih</span>
-                    <span className="text-center">Hitam</span>
-                  </div>
-
-                  <div className="breakdown-row">
-                    <span className="badge-text text-brilliant">★ Brilian (!!)</span>
-                    <span className="stat-pill-sm">{analysisResult.stats.w.brilliant}</span>
-                    <span className="stat-pill-sm">{analysisResult.stats.b.brilliant}</span>
-                  </div>
-
-                  <div className="breakdown-row">
-                    <span className="badge-text text-best">✓ Terbaik</span>
-                    <span className="stat-pill-sm">{analysisResult.stats.w.best}</span>
-                    <span className="stat-pill-sm">{analysisResult.stats.b.best}</span>
-                  </div>
-
-                  <div className="breakdown-row">
-                    <span className="badge-text text-good">✓ Bagus</span>
-                    <span className="stat-pill-sm">{analysisResult.stats.w.good}</span>
-                    <span className="stat-pill-sm">{analysisResult.stats.b.good}</span>
-                  </div>
-
-                  <div className="breakdown-row">
-                    <span className="badge-text text-inaccuracy">?! Inakurasi</span>
-                    <span className="stat-pill-sm">{analysisResult.stats.w.inaccuracy}</span>
-                    <span className="stat-pill-sm">{analysisResult.stats.b.inaccuracy}</span>
-                  </div>
-
-                  <div className="breakdown-row">
-                    <span className="badge-text text-mistake">? Kesalahan</span>
-                    <span className="stat-pill-sm">{analysisResult.stats.w.mistake}</span>
-                    <span className="stat-pill-sm">{analysisResult.stats.b.mistake}</span>
-                  </div>
-
-                  <div className="breakdown-row">
-                    <span className="badge-text text-blunder">?? Blunder</span>
-                    <span className="stat-pill-sm text-red font-bold">
-                      {analysisResult.stats.w.blunder}
-                    </span>
-                    <span className="stat-pill-sm text-red font-bold">
-                      {analysisResult.stats.b.blunder}
-                    </span>
-                  </div>
-                </div>
+              {/* Board Quick Toggles */}
+              <div className="board-under-controls">
+                <label className="toggle-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={showBestMoveArrow}
+                    onChange={(e) => setShowBestMoveArrow(e.target.checked)}
+                  />
+                  <span className="toggle-switch-slider" />
+                  <span className="toggle-text">
+                    Tanda Panah Langkah Terbaik (Best Move <span className="text-green">★</span>)
+                  </span>
+                </label>
               </div>
 
-              {/* Action Buttons */}
-              <div className="review-side-actions">
-                <button className="btn-secondary btn-sm" onClick={handleCopyPgn}>
-                  {copied ? <Check size={14} className="text-green" /> : <Copy size={14} />}
-                  <span>{copied ? 'Tersalin!' : 'Salin PGN'}</span>
-                </button>
-                <button className="btn-secondary btn-sm" onClick={startAnalysis}>
-                  <RefreshCw size={14} />
-                  <span>Ulangi Analisis</span>
-                </button>
+              {/* Interactive Evaluation Graph */}
+              <div className="graph-section-wrapper">
+                <EvalGraph
+                  moves={analysisResult.moves}
+                  selectedIndex={selectedMoveIndex}
+                  onSelectMove={(idx) => setSelectedMoveIndex(idx)}
+                />
               </div>
             </div>
 
-            {/* Right Column: Move Navigator & Stockfish Advice */}
-            <div className="review-main-panel">
-              {/* Eval Timeline Bar */}
-              <div className="eval-timeline-wrap">
-                <span className="timeline-label">Evaluasi Permainan:</span>
-                <div className="eval-bars-container">
-                  {analysisResult.moves.map((m, idx) => {
-                    const isSelected = idx === selectedMoveIndex;
-                    const clampedAdv = Math.max(-500, Math.min(500, m.whiteAdvantage));
-                    const whiteH = Math.max(8, Math.min(92, 50 + (clampedAdv / 500) * 45));
+            {/* RIGHT: Coach, Move Navigator, Breakdown & Move History */}
+            <div className="studio-inspector-column">
+              {/* Coach / Move Assessment Card */}
+              {currentMove && (
+                <div className="coach-speech-card">
+                  <div className="coach-header">
+                    <div className="coach-avatar">
+                      <Bot size={22} className="coach-bot-icon" />
+                    </div>
+                    <div className="coach-title-area">
+                      <div className="coach-classification-badge" style={{
+                        backgroundColor: CLASSIFICATION_META[currentMove.classification]?.bg || '#222',
+                        color: CLASSIFICATION_META[currentMove.classification]?.color || '#81b64c',
+                        borderColor: CLASSIFICATION_META[currentMove.classification]?.color || '#81b64c',
+                      }}>
+                        <span className="meta-sym">{CLASSIFICATION_META[currentMove.classification]?.symbol}</span>
+                        <span className="meta-lbl">{CLASSIFICATION_META[currentMove.classification]?.label}</span>
+                      </div>
+                      <span className="move-indicator-text">
+                        Langkah {Math.floor(currentMove.moveIndex / 2) + 1}
+                        {currentMove.color === 'w' ? '.' : '...'} {currentMove.san} ({currentMove.color === 'w' ? 'Putih' : 'Hitam'})
+                      </span>
+                    </div>
+                    <div className="move-accuracy-score">
+                      <span className="score-num">{currentMove.moveAccuracy}%</span>
+                      <span className="score-lbl">Akurasi</span>
+                    </div>
+                  </div>
+
+                  <p className="coach-narrative">{currentMove.comment}</p>
+
+                  {/* Best Move Recommendation Box if played move was not best */}
+                  {currentMove.bestMoveSan && currentMove.classification !== 'best' && currentMove.classification !== 'book' && (
+                    <div className="recommendation-banner">
+                      <div className="rec-text-wrap">
+                        <span className="rec-sub">Rekomendasi Stockfish:</span>
+                        <span className="rec-best-san">{currentMove.bestMoveSan}</span>
+                      </div>
+                      {currentMove.cpLoss > 0 && (
+                        <span className="rec-loss-badge">-{currentMove.cpLoss} cp</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Move Navigator Toolbar */}
+              <div className="studio-nav-bar">
+                <button
+                  className="nav-btn"
+                  disabled={selectedMoveIndex === 0}
+                  onClick={() => setSelectedMoveIndex(0)}
+                  title="Awal Pertandingan (Home)"
+                >
+                  <ChevronFirst size={18} />
+                </button>
+                <button
+                  className="nav-btn"
+                  disabled={selectedMoveIndex === 0}
+                  onClick={() => setSelectedMoveIndex((prev) => Math.max(0, prev - 1))}
+                  title="Langkah Sebelumnya (Panah Kiri)"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  className={`nav-btn btn-play-pause ${isPlaying ? 'active-playing' : ''}`}
+                  onClick={() => setIsPlaying(!isPlaying)}
+                  title={isPlaying ? 'Jeda (Spasi)' : 'Putar Permainan (Spasi)'}
+                >
+                  {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+                </button>
+                <button
+                  className="nav-btn"
+                  disabled={selectedMoveIndex === analysisResult.moves.length - 1}
+                  onClick={() =>
+                    setSelectedMoveIndex((prev) =>
+                      Math.min(analysisResult.moves.length - 1, prev + 1)
+                    )
+                  }
+                  title="Langkah Selanjutnya (Panah Kanan)"
+                >
+                  <ChevronRight size={18} />
+                </button>
+                <button
+                  className="nav-btn"
+                  disabled={selectedMoveIndex === analysisResult.moves.length - 1}
+                  onClick={() => setSelectedMoveIndex(analysisResult.moves.length - 1)}
+                  title="Akhir Pertandingan (End)"
+                >
+                  <ChevronLast size={18} />
+                </button>
+
+                <div className="nav-step-counter">
+                  <span className="step-current">{selectedMoveIndex + 1}</span>
+                  <span className="step-slash">/</span>
+                  <span className="step-total">{analysisResult.moves.length}</span>
+                </div>
+              </div>
+
+              {/* Classification Stats Breakdown */}
+              <div className="breakdown-card">
+                <div className="breakdown-head">
+                  <span className="b-title">Klasifikasi Langkah</span>
+                  <div className="b-players">
+                    <span className="p-tag-w">Putih</span>
+                    <span className="p-tag-b">Hitam</span>
+                  </div>
+                </div>
+
+                <div className="breakdown-rows-container">
+                  {Object.entries(CLASSIFICATION_META).map(([key, meta]) => {
+                    const countW = analysisResult.stats?.w?.[key] || 0;
+                    const countB = analysisResult.stats?.b?.[key] || 0;
+                    if (countW === 0 && countB === 0) return null;
 
                     return (
-                      <div
-                        key={idx}
-                        className={`eval-bar-col ${isSelected ? 'selected-eval-col' : ''}`}
-                        onClick={() => setSelectedMoveIndex(idx)}
-                        title={`Langkah ${idx + 1} (${m.san}): ${
-                          m.evalScore > 0 ? `+${(m.evalScore / 100).toFixed(1)}` : (m.evalScore / 100).toFixed(1)
-                        }`}
-                      >
-                        <div
-                          className="eval-white-fill"
-                          style={{ height: `${whiteH}%` }}
-                        />
+                      <div key={key} className="b-row-item">
+                        <div className="b-row-label">
+                          <span className="b-sym" style={{ color: meta.color }}>
+                            {meta.symbol}
+                          </span>
+                          <span className="b-name">{meta.label}</span>
+                        </div>
+                        <div className="b-row-counts">
+                          <span className={`b-pill ${countW > 0 ? 'pill-active' : ''}`}>
+                            {countW}
+                          </span>
+                          <span className={`b-pill ${countB > 0 ? 'pill-active' : ''}`}>
+                            {countB}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Move Inspector Card */}
-              {currentMove && (
-                <div className="current-move-card">
-                  <div className="move-card-header">
-                    <div className="move-tag-badge">
-                      <span className="move-num">
-                        {Math.floor(currentMove.moveIndex / 2) + 1}
-                        {currentMove.color === 'w' ? '.' : '...'}
-                      </span>
-                      <span className="move-san">{currentMove.san}</span>
-                      <span className="move-player-pill">
-                        {currentMove.color === 'w' ? 'Putih' : 'Hitam'}
-                      </span>
-                    </div>
-
-                    {getClassificationBadge(currentMove.classification)}
-                  </div>
-
-                  <div className="move-card-body">
-                    <div className="eval-score-row">
-                      <span className="eval-pill">
-                        Evaluasi:{' '}
-                        <strong>
-                          {currentMove.evalScore > 0
-                            ? `+${(currentMove.evalScore / 100).toFixed(2)}`
-                            : (currentMove.evalScore / 100).toFixed(2)}
-                        </strong>
-                      </span>
-                      <span className="acc-badge">
-                        Akurasi Langkah: <strong>{currentMove.moveAccuracy}%</strong>
-                      </span>
-                    </div>
-
-                    <p className="move-comment">{currentMove.comment}</p>
-
-                    {currentMove.bestMoveUci && currentMove.classification !== 'best' && (
-                      <div className="engine-recommendation-box">
-                        <span className="rec-label">Saran Stockfish:</span>
-                        <span className="rec-move">{currentMove.bestMoveUci}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Navigation controls */}
-                  <div className="move-nav-controls">
-                    <button
-                      className="btn-secondary btn-sm"
-                      disabled={selectedMoveIndex === 0}
-                      onClick={() => setSelectedMoveIndex((prev) => Math.max(0, prev - 1))}
-                    >
-                      <ChevronLeft size={16} /> Sebelumnya
-                    </button>
-                    <span className="move-index-indicator">
-                      {selectedMoveIndex + 1} / {analysisResult.moves.length}
-                    </span>
-                    <button
-                      className="btn-secondary btn-sm"
-                      disabled={selectedMoveIndex === analysisResult.moves.length - 1}
-                      onClick={() =>
-                        setSelectedMoveIndex((prev) =>
-                          Math.min(analysisResult.moves.length - 1, prev + 1)
-                        )
-                      }
-                    >
-                      Selanjutnya <ChevronRight size={16} />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Move List Strip */}
-              <div className="moves-chip-container">
-                {analysisResult.moves.map((m, idx) => (
+              {/* Move History Strip with Filter Tabs */}
+              <div className="move-list-section">
+                <div className="filter-tabs-row">
                   <button
-                    key={idx}
-                    className={`move-chip ${idx === selectedMoveIndex ? 'active-chip' : ''} chip-${m.classification}`}
-                    onClick={() => setSelectedMoveIndex(idx)}
+                    className={`filter-tab ${filterMode === 'all' ? 'tab-active' : ''}`}
+                    onClick={() => setFilterMode('all')}
                   >
-                    <span className="chip-num">
-                      {Math.floor(idx / 2) + 1}
-                      {m.color === 'w' ? '.' : '..'}
-                    </span>
-                    <span className="chip-san">{m.san}</span>
+                    Semua ({analysisResult.moves.length})
                   </button>
-                ))}
+                  <button
+                    className={`filter-tab ${filterMode === 'key' ? 'tab-active' : ''}`}
+                    onClick={() => setFilterMode('key')}
+                  >
+                    Langkah Kunci
+                  </button>
+                  <button
+                    className={`filter-tab ${filterMode === 'book' ? 'tab-active' : ''}`}
+                    onClick={() => setFilterMode('book')}
+                  >
+                    Langkah Buku
+                  </button>
+                </div>
+
+                <div className="moves-chip-scrollpane">
+                  {filteredMoves.map((m) => {
+                    const isSelected = m.moveIndex === selectedMoveIndex;
+                    const meta = CLASSIFICATION_META[m.classification] || CLASSIFICATION_META.good;
+
+                    return (
+                      <div
+                        key={m.moveIndex}
+                        className={`move-chip-row ${isSelected ? 'selected-chip-row' : ''}`}
+                        onClick={() => setSelectedMoveIndex(m.moveIndex)}
+                      >
+                        <span className="chip-idx">
+                          {Math.floor(m.moveIndex / 2) + 1}
+                          {m.color === 'w' ? '.' : '...'}
+                        </span>
+                        <span className="chip-san-bold">{m.san}</span>
+
+                        <span
+                          className="chip-class-badge"
+                          style={{ color: meta.color, backgroundColor: meta.bg }}
+                        >
+                          {meta.symbol} {meta.label}
+                        </span>
+
+                        <span className="chip-eval-tag">
+                          {m.whiteAdvantage > 0
+                            ? `+${(m.whiteAdvantage / 100).toFixed(1)}`
+                            : (m.whiteAdvantage / 100).toFixed(1)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>

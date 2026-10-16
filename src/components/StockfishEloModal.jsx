@@ -53,12 +53,12 @@ export const StockfishEloModal = ({
           <div className="slider-label-row">
             <span>250 (Pemula)</span>
             <span>1600 (Klub)</span>
-            <span>3200 (Grandmaster)</span>
+            <span>3650+ (Stockfish 19 NNUE)</span>
           </div>
           <input
             type="range"
             min="250"
-            max="3200"
+            max="3650"
             step="50"
             value={currentElo}
             onChange={(e) => onSelectElo(parseInt(e.target.value, 10))}
