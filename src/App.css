@@ -2448,4 +2448,609 @@ body, html {
   }
 }
 
+/* ============================================================
+   GAME REVIEW HEADER PILLS & TOOLS
+   ============================================================ */
+.game-title-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(212, 175, 55, 0.12);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #f3cf7a;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pgn-import-highlight-btn {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.15), rgba(129, 182, 76, 0.15)) !important;
+  border-color: rgba(212, 175, 55, 0.4) !important;
+  color: #f1dfa0 !important;
+}
+
+.pgn-import-highlight-btn:hover {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.28), rgba(129, 182, 76, 0.28)) !important;
+  border-color: #d4af37 !important;
+  color: #fff !important;
+  box-shadow: 0 0 14px rgba(212, 175, 55, 0.35);
+}
+
+/* ============================================================
+   LOADING STATE
+   ============================================================ */
+.review-loading-view {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background: radial-gradient(circle at center, rgba(30, 29, 26, 0.95), #141311);
+}
+
+.loading-center-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 520px;
+  gap: 16px;
+}
+
+.pulse-icon-ring {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(212, 175, 55, 0.08);
+  border: 2px solid rgba(212, 175, 55, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulseRing 2s infinite ease-in-out;
+}
+
+@keyframes pulseRing {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4); }
+  70% { transform: scale(1.05); box-shadow: 0 0 0 18px rgba(212, 175, 55, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
+}
+
+.progress-bar-wrap {
+  width: 100%;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #d4af37, #81b64c);
+  border-radius: 999px;
+  transition: width 0.25s ease-out;
+  box-shadow: 0 0 12px rgba(129, 182, 76, 0.6);
+}
+
+.progress-meta-row {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.progress-percent {
+  font-weight: 800;
+  color: #81b64c;
+  font-family: 'Fira Code', monospace;
+}
+
+.progress-sub {
+  font-size: 0.74rem;
+}
+
+/* ============================================================
+   ANALYSIS HUB & PGN IMPORTER EMPTY STATE
+   ============================================================ */
+.review-hub-empty-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 28px;
+  gap: 20px;
+  overflow-y: auto;
+  background: #161512;
+}
+
+.hub-welcome-banner {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(129, 182, 76, 0.06));
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  border-radius: 14px;
+  padding: 16px 20px;
+}
+
+.hub-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: rgba(212, 175, 55, 0.12);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.hub-banner-content {
+  flex: 1;
+}
+
+.hub-banner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #81b64c;
+  background: rgba(129, 182, 76, 0.15);
+  border: 1px solid rgba(129, 182, 76, 0.3);
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hub-banner-content h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 4px 0;
+}
+
+.hub-banner-content p {
+  font-size: 0.85rem;
+  color: #bbb;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.hub-main-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) minmax(420px, 1.2fr);
+  gap: 18px;
+  flex: 1;
+  min-height: 0;
+}
+
+.hub-card {
+  background: #1e1d1a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title-row h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.card-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* PGN Textarea & Action */
+.paste-input-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.pgn-textarea {
+  width: 100%;
+  background: #141311;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: #e5e5e5;
+  font-family: 'Fira Code', 'Courier New', monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  resize: vertical;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.pgn-textarea:focus {
+  outline: none;
+  border-color: #d4af37;
+  box-shadow: 0 0 16px rgba(212, 175, 55, 0.25);
+  background: #181714;
+}
+
+.pgn-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(250, 65, 45, 0.15);
+  border: 1px solid rgba(250, 65, 45, 0.4);
+  color: #ff7666;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.pgn-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.btn-hub-analyze {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #81b64c 0%, #5d8e32 100%);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px rgba(129, 182, 76, 0.35);
+}
+
+.btn-hub-analyze:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(129, 182, 76, 0.5);
+  background: linear-gradient(135deg, #8dc554 0%, #68a038 100%);
+}
+
+.btn-hub-analyze:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-hub-clear {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #aaa;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-hub-clear:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* Sample Games Grid */
+.sample-games-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 380px;
+  padding-right: 2px;
+}
+
+.sample-game-tile {
+  background: #252420;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: left;
+}
+
+.sample-game-tile:hover {
+  transform: translateY(-2px);
+  background: #2a2924;
+  border-color: rgba(212, 175, 55, 0.4);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4), 0 0 16px rgba(212, 175, 55, 0.15);
+}
+
+.tile-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.sample-title {
+  font-weight: 800;
+  font-size: 0.86rem;
+  color: #fff;
+}
+
+.sample-tag {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.sample-players {
+  font-size: 0.75rem;
+  color: #d4af37;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sample-desc {
+  font-size: 0.74rem;
+  color: #999;
+  line-height: 1.35;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tile-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.72rem;
+}
+
+.sample-moves {
+  color: var(--text-muted);
+  font-family: 'Fira Code', monospace;
+}
+
+.sample-action-cta {
+  color: #81b64c;
+  font-weight: 800;
+}
+
+/* Hub Footer Bar */
+.hub-footer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btn-back-to-play {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #eee;
+  padding: 9px 16px;
+  border-radius: 9px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-back-to-play:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.hub-engine-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* ============================================================
+   FLOATING IMPORT PGN MODAL
+   ============================================================ */
+.import-pgn-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.import-pgn-dialog {
+  background: #1e1d1a;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 620px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9), 0 0 40px rgba(212, 175, 55, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: scaleUp 0.2s ease-out;
+}
+
+.dialog-header {
+  height: 56px;
+  background: #262522;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+}
+
+.dialog-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dialog-title-group h3 {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+  margin: 0;
+}
+
+.dialog-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dialog-subtext {
+  font-size: 0.82rem;
+  color: #aaa;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.dialog-textarea {
+  min-height: 120px;
+}
+
+.dialog-quick-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.presets-label {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.presets-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-chip-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ddd;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.preset-chip-btn:hover {
+  background: rgba(212, 175, 55, 0.15);
+  border-color: #d4af37;
+  color: #f3cf7a;
+}
+
+.dialog-footer {
+  padding: 14px 20px;
+  background: #181714;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-dialog-cancel {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #bbb;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-dialog-cancel:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dialog-submit-btn {
+  flex: initial;
+  padding: 9px 20px;
+}
+
+/* Responsive query for mobile / tablet */
+@media (max-width: 820px) {
+  .hub-main-grid {
+    grid-template-columns: 1fr;
+  }
+  .sample-games-grid {
+    grid-template-columns: 1fr;
+    max-height: 240px;
+  }
+  .hub-welcome-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+
 

@@ -23,8 +23,12 @@ import {
   Layers,
   Eye,
   Award,
-  Bot
+  Bot,
+  FileText,
+  ArrowLeft,
+  RefreshCw
 } from 'lucide-react';
+import { Chess } from 'chess.js';
 import { stockfishService } from '../engine/StockfishService';
 import { ReviewChessBoard } from './ReviewChessBoard';
 import { EvalBar } from './EvalBar';
@@ -45,12 +49,142 @@ const CLASSIFICATION_META = {
   blunder: { label: 'Blunder', symbol: '??', color: '#fa412d', bg: 'rgba(250, 65, 45, 0.18)', desc: 'Kehilangan perwira atau keunggulan besar' },
 };
 
+// Preset Famous Master & Study Games
+export const SAMPLE_GAMES = [
+  {
+    id: 'opera',
+    title: 'The Opera Game',
+    year: '1858',
+    players: 'Paul Morphy vs Duke Karl / Count Isouard',
+    movesCount: 33,
+    tag: 'Brilian & Legendaris',
+    tagColor: '#26c2a3',
+    desc: 'Pengorbanan menteri & skakmat dua perwira legendaris di Paris Opera House.',
+    pgn: '1. e4 e5 2. Nf3 d6 3. d4 Bg4 4. dxe5 Bxf3 5. Qxf3 dxe5 6. Bc4 Nf6 7. Qb3 Qe7 8. Nc3 c6 9. Bg5 b5 10. Nxb5 cxb5 11. Bxb5+ Nbd7 12. O-O-O Rd8 13. Rxd7 Rxd7 14. Rd1 Qe6 15. Bxd7+ Nxd7 16. Qb8+ Nxb8 17. Rd8#'
+  },
+  {
+    id: 'scholar',
+    title: "Scholar's Mate",
+    year: 'Taktik Kilat',
+    players: 'Serangan Sayap Raja f7',
+    movesCount: 7,
+    tag: 'Skakmat & Blunder',
+    tagColor: '#fa412d',
+    desc: 'Contoh skakmat kilat 4 langkah paling populer akibat blunder pertahanan titik f7.',
+    pgn: '1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7#'
+  },
+  {
+    id: 'kasparov',
+    title: "Kasparov's Immortal",
+    year: '1999',
+    players: 'Garry Kasparov vs Veselin Topalov',
+    movesCount: 87,
+    tag: 'Mahakarya Dunia',
+    tagColor: '#3ea3db',
+    desc: 'Kombinasi pengorbanan benteng 24. Rxd4 yang dinobatkan sebagai salah satu partai terindah abad 20.',
+    pgn: '1. e4 d6 2. d4 Nf6 3. Nc3 g6 4. Be3 Bg7 5. Qd2 c6 6. f3 b5 7. Nge2 Nbd7 8. Bh6 Bxh6 9. Qxh6 Bb7 10. a3 e5 11. O-O-O Qe7 12. Kb1 a6 13. Nc1 O-O-O 14. Nb3 exd4 15. Rxd4 c5 16. Rd1 Nb6 17. g3 Kb8 18. Na5 Ba8 19. Bh3 d5 20. Qf4+ Ka7 21. Rhe1 d4 22. Nd5 Nbxd5 23. exd5 Qd6 24. Rxd4 cxd4 25. Re7+ Kb6 26. Qxd4+ Kxa5 27. b4+ Ka4 28. Qc3 Qxd5 29. Ra7 Bb7 30. Rxb7 Qc4 31. Qxf6 Kxa3 32. Qxa6+ Kxb4 33. c3+ Kxc3 34. Qa1+ Kd2 35. Qb2+ Kd1 36. Bf1 Rd2 37. Rd7 Rxd7 38. Bxc4 bxc4 39. Qxh8 Rd3 40. Qa8 c3 41. Qa4+ Ke1 42. f4 f5 43. Kc1 Rd2 44. Qa7 1-0'
+  },
+  {
+    id: 'evergreen',
+    title: 'The Evergreen Game',
+    year: '1852',
+    players: 'Adolf Anderssen vs Jean Dufresne',
+    movesCount: 47,
+    tag: 'Romantisme Taktis',
+    tagColor: '#d5a452',
+    desc: 'Evans Gambit legendaris dengan pengorbanan menteri dan dua benteng beruntun yang abadi.',
+    pgn: '1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. b4 Bxb4 5. c3 Ba5 6. d4 exd4 7. O-O d3 8. Qb3 Qf6 9. e5 Qg6 10. Re1 Nge7 11. Ba3 b5 12. Qxb5 Rb8 13. Qa4 Bb6 14. Nbd2 Bb7 15. Ne4 Qf5 16. Bxd3 Qh5 17. Nf6+ gxf6 18. exf6 Rg8 19. Rad1 Qxf3 20. Rxe7+ Nxe7 21. Qxd7+ Kxd7 22. Bf5+ Ke8 23. Bd7+ Kf8 24. Bxe7#'
+  }
+];
+
+// Robust PGN parser with fallback to SAN tokens
+export function parsePgnWithDetails(pgnString) {
+  if (!pgnString || !pgnString.trim()) {
+    throw new Error('Notasi PGN tidak boleh kosong.');
+  }
+
+  const cleanPgn = pgnString.trim();
+  const chess = new Chess();
+  let loaded = false;
+
+  let white = '';
+  let black = '';
+  let event = '';
+
+  const whiteMatch = cleanPgn.match(/\[White\s+"([^"]+)"\]/i);
+  if (whiteMatch) white = whiteMatch[1];
+  const blackMatch = cleanPgn.match(/\[Black\s+"([^"]+)"\]/i);
+  if (blackMatch) black = blackMatch[1];
+  const eventMatch = cleanPgn.match(/\[Event\s+"([^"]+)"\]/i);
+  if (eventMatch) event = eventMatch[1];
+
+  try {
+    chess.loadPgn(cleanPgn, { strict: false });
+    loaded = chess.history().length > 0;
+  } catch (err) {
+    loaded = false;
+  }
+
+  if (!loaded) {
+    const sansHeaders = cleanPgn.replace(/\[.*?\]/g, ' ').trim();
+    try {
+      const chess2 = new Chess();
+      chess2.loadPgn(sansHeaders, { strict: false });
+      if (chess2.history().length > 0) {
+        return {
+          moves: chess2.history({ verbose: true }),
+          white: white || 'Putih',
+          black: black || 'Hitam',
+          event: event || 'Analisis PGN'
+        };
+      }
+    } catch (e) {}
+
+    try {
+      const chess3 = new Chess();
+      const cleanTokens = sansHeaders
+        .replace(/\{.*?\}/g, ' ')
+        .replace(/\(.*?\)/g, ' ')
+        .replace(/1-0|0-1|1\/2-1\/2|\*/g, ' ')
+        .replace(/\d+\.+/g, ' ')
+        .trim()
+        .split(/\s+/);
+
+      for (const tok of cleanTokens) {
+        if (!tok) continue;
+        const res = chess3.move(tok);
+        if (!res) break;
+      }
+
+      if (chess3.history().length > 0) {
+        return {
+          moves: chess3.history({ verbose: true }),
+          white: white || 'Putih',
+          black: black || 'Hitam',
+          event: event || 'Analisis PGN'
+        };
+      }
+    } catch (e) {}
+
+    throw new Error('Format PGN tidak dikenali. Pastikan notasi catur valid (misal: 1. e4 e5 2. Nf3 Nc6...).');
+  }
+
+  return {
+    moves: chess.history({ verbose: true }),
+    white: white || 'Putih',
+    black: black || 'Hitam',
+    event: event || 'Analisis PGN'
+  };
+}
+
 export const GameReviewModal = ({
   isOpen,
   onClose,
   moveHistory = [],
   onSelectMovePosition,
 }) => {
+  const [activeMoves, setActiveMoves] = useState([]);
+  const [gameTitle, setGameTitle] = useState('Pertandingan Saat Ini');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [analysisResult, setAnalysisResult] = useState(null);
@@ -60,22 +194,41 @@ export const GameReviewModal = ({
   const [showBestMoveArrow, setShowBestMoveArrow] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [filterMode, setFilterMode] = useState('all'); // 'all' | 'key' | 'book'
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [pgnInput, setPgnInput] = useState('');
+  const [pgnError, setPgnError] = useState('');
   const autoplayTimerRef = useRef(null);
 
-  // Trigger analysis on modal open
+  // Trigger analysis when modal opens with active board moves
   useEffect(() => {
-    if (isOpen && !analysisResult && moveHistory.length > 0) {
-      startAnalysis();
+    if (isOpen) {
+      if (moveHistory && moveHistory.length > 0) {
+        // If board has new moves or haven't analyzed yet
+        if (!analysisResult || activeMoves !== moveHistory) {
+          setActiveMoves(moveHistory);
+          setGameTitle('Pertandingan Saat Ini');
+          runAnalysis(moveHistory, 'Pertandingan Saat Ini');
+        }
+      } else {
+        // If board has no moves and no analysis result yet
+        if (!analysisResult) {
+          setActiveMoves([]);
+        }
+      }
+    } else {
+      setShowImportModal(false);
+      setPgnError('');
     }
   }, [isOpen, moveHistory.length]);
 
-  const startAnalysis = async () => {
-    if (moveHistory.length === 0) return;
+  const runAnalysis = async (movesToAnalyze, title = 'Pertandingan Saat Ini') => {
+    if (!movesToAnalyze || movesToAnalyze.length === 0) return;
     setIsAnalyzing(true);
     setProgress(0);
+    setGameTitle(title);
 
     try {
-      const result = await stockfishService.analyzeGame(moveHistory, (p) => {
+      const result = await stockfishService.analyzeGame(movesToAnalyze, (p) => {
         setProgress(p);
       });
       setAnalysisResult(result);
@@ -86,6 +239,37 @@ export const GameReviewModal = ({
       console.error('Error analyzing match:', err);
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleLoadSampleGame = (sample) => {
+    try {
+      setPgnError('');
+      const parsed = parsePgnWithDetails(sample.pgn);
+      setActiveMoves(parsed.moves);
+      setShowImportModal(false);
+      runAnalysis(parsed.moves, `${sample.title} (${sample.year})`);
+    } catch (err) {
+      setPgnError(err.message);
+    }
+  };
+
+  const handleAnalyzePgnInput = () => {
+    try {
+      setPgnError('');
+      if (!pgnInput.trim()) {
+        setPgnError('Silakan tempelkan teks PGN terlebih dahulu.');
+        return;
+      }
+      const parsed = parsePgnWithDetails(pgnInput);
+      setActiveMoves(parsed.moves);
+      setShowImportModal(false);
+      const title = parsed.white !== 'Putih' || parsed.black !== 'Hitam'
+        ? `${parsed.white} vs ${parsed.black}`
+        : 'Analisis PGN Kustom';
+      runAnalysis(parsed.moves, title);
+    } catch (err) {
+      setPgnError(err.message);
     }
   };
 
@@ -152,7 +336,8 @@ export const GameReviewModal = ({
   const opening = analysisResult?.opening;
 
   const handleCopyPgn = () => {
-    const pgn = moveHistory.reduce((acc, m, idx) => {
+    const movesToUse = activeMoves.length > 0 ? activeMoves : moveHistory;
+    const pgn = movesToUse.reduce((acc, m, idx) => {
       if (idx % 2 === 0) {
         return `${acc} ${Math.floor(idx / 2) + 1}. ${m.san}`;
       }
@@ -175,6 +360,8 @@ export const GameReviewModal = ({
     return true;
   });
 
+  const hasMovesToDisplay = !isAnalyzing && analysisResult && analysisResult.moves.length > 0;
+
   return (
     <div className="modal-backdrop review-backdrop">
       <div className="chesscom-review-card">
@@ -186,6 +373,13 @@ export const GameReviewModal = ({
               <span className="brand-name">Stockfish 19 NNUE</span>
               <span className="brand-tag">Game Review</span>
             </div>
+
+            {gameTitle && (
+              <div className="game-title-pill" title={gameTitle}>
+                <Award size={14} className="gold-text" />
+                <span className="game-title-text">{gameTitle}</span>
+              </div>
+            )}
 
             {opening && (
               <div className="opening-eco-pill" title={opening.desc}>
@@ -216,6 +410,17 @@ export const GameReviewModal = ({
           {/* Action buttons */}
           <div className="header-right-actions">
             <button
+              className="review-tool-btn pgn-import-highlight-btn"
+              onClick={() => {
+                setPgnError('');
+                setShowImportModal(true);
+              }}
+              title="Tempel atau Impor PGN Eksternal"
+            >
+              <FileText size={16} className="gold-text" />
+              <span>Impor PGN</span>
+            </button>
+            <button
               className="review-tool-btn"
               onClick={() => setIsFlipped(!isFlipped)}
               title="Balik Papan (Flip View)"
@@ -236,29 +441,157 @@ export const GameReviewModal = ({
         {/* Loading State */}
         {isAnalyzing && (
           <div className="review-loading-view">
-            <div className="spinner-royal" />
-            <h3 className="gold-text">Stockfish 19 sedang mengevaluasi permainan...</h3>
-            <p className="text-muted">
-              Menganalisis CAPS2, klasifikasi langkah brilian, teori pembukaan, dan panah taktis.
-            </p>
-            <div className="progress-bar-wrap">
-              <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
+            <div className="loading-center-box">
+              <div className="pulse-icon-ring">
+                <Cpu size={40} className="gold-text pulse-cpu" />
+              </div>
+              <h3 className="gold-text">Stockfish 19 sedang mengevaluasi permainan...</h3>
+              <p className="text-muted">
+                Menganalisis CAPS2 akurasi pemain, klasifikasi langkah brilian & blunder, teori pembukaan, dan panah taktis.
+              </p>
+              <div className="progress-bar-wrap">
+                <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
+              </div>
+              <div className="progress-meta-row">
+                <span className="progress-percent">{progress}% selesai</span>
+                <span className="progress-sub">Engine: Pure Stockfish 19 NNUE (Lichess WebAssembly)</span>
+              </div>
             </div>
-            <span className="progress-percent">{progress}% selesai</span>
           </div>
         )}
 
-        {/* Empty State */}
-        {!isAnalyzing && (!moveHistory || moveHistory.length === 0) && (
-          <div className="review-empty-view">
-            <AlertTriangle size={48} className="gold-text" />
-            <h3>Belum ada langkah dalam pertandingan ini.</h3>
-            <p className="text-muted">Mainkan beberapa langkah catur terlebih dahulu sebelum meninjau.</p>
+        {/* Empty State / Analysis Center (When no moves played yet or user wants to import PGN) */}
+        {!isAnalyzing && !hasMovesToDisplay && (
+          <div className="review-hub-empty-container">
+            <div className="hub-welcome-banner">
+              <div className="hub-icon-wrapper">
+                <Sparkles size={32} className="gold-text" />
+              </div>
+              <div className="hub-banner-content">
+                <div className="hub-banner-badge">
+                  <Cpu size={14} /> Stockfish 19 NNUE Analysis Center
+                </div>
+                <h2>Pusat Analisis Game & Impor PGN</h2>
+                <p>
+                  Belum ada langkah yang dimainkan pada papan catur aktif.
+                  Anda dapat <strong>menempelkan notasi PGN</strong> dari Chess.com / Lichess,
+                  mencoba <strong>pertandingan master legendaris</strong> dengan 1-klik,
+                  atau kembali bermain di papan 3D.
+                </p>
+              </div>
+            </div>
+
+            <div className="hub-main-grid">
+              {/* Left Column: PGN Paste Box */}
+              <div className="hub-card pgn-paste-card">
+                <div className="card-head">
+                  <div className="card-title-row">
+                    <BookMarked size={20} className="gold-text" />
+                    <h3>Tempel Notasi PGN Eksternal</h3>
+                  </div>
+                  <span className="card-subtitle">Mendukung ekspor Chess.com, Lichess, atau notasi SAN standar</span>
+                </div>
+
+                <div className="paste-input-area">
+                  <textarea
+                    className="pgn-textarea"
+                    value={pgnInput}
+                    onChange={(e) => {
+                      setPgnInput(e.target.value);
+                      if (pgnError) setPgnError('');
+                    }}
+                    placeholder={`Tempelkan notasi PGN di sini...\nContoh:\n1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O...\n\nAtau tempel ekspor PGN lengkap dari Chess.com / Lichess dengan header [Event] [Site]...`}
+                    rows={8}
+                  />
+                  {pgnError && (
+                    <div className="pgn-error-banner">
+                      <AlertOctagon size={16} />
+                      <span>{pgnError}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pgn-actions-row">
+                  <button
+                    className="btn-hub-analyze"
+                    onClick={handleAnalyzePgnInput}
+                    disabled={!pgnInput.trim()}
+                  >
+                    <Zap size={18} />
+                    <span>Mulai Analisis dengan Stockfish 19</span>
+                  </button>
+                  {pgnInput && (
+                    <button
+                      className="btn-hub-clear"
+                      onClick={() => {
+                        setPgnInput('');
+                        setPgnError('');
+                      }}
+                    >
+                      Bersihkan
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Famous Master Games Presets */}
+              <div className="hub-card sample-games-card">
+                <div className="card-head">
+                  <div className="card-title-row">
+                    <Award size={20} className="gold-text" />
+                    <h3>Pertandingan Master Legendaris (1-Klik)</h3>
+                  </div>
+                  <span className="card-subtitle">Pilih permainan di bawah untuk langsung menguji evaluasi mendalam</span>
+                </div>
+
+                <div className="sample-games-grid">
+                  {SAMPLE_GAMES.map((sample) => (
+                    <div
+                      key={sample.id}
+                      className="sample-game-tile"
+                      onClick={() => handleLoadSampleGame(sample)}
+                      title={`Klik untuk menganalisis ${sample.title}`}
+                    >
+                      <div className="tile-top">
+                        <span className="sample-title">{sample.title}</span>
+                        <span
+                          className="sample-tag"
+                          style={{
+                            backgroundColor: `${sample.tagColor}22`,
+                            color: sample.tagColor,
+                            borderColor: `${sample.tagColor}55`
+                          }}
+                        >
+                          {sample.tag}
+                        </span>
+                      </div>
+                      <div className="sample-players">{sample.players}</div>
+                      <p className="sample-desc">{sample.desc}</p>
+                      <div className="tile-foot">
+                        <span className="sample-moves">{sample.movesCount} Langkah</span>
+                        <span className="sample-action-cta">Analisis Sekarang →</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Bar */}
+            <div className="hub-footer-bar">
+              <button className="btn-back-to-play" onClick={onClose}>
+                <ArrowLeft size={16} />
+                <span>Kembali ke Papan 3D & Mainkan Catur</span>
+              </button>
+              <span className="hub-engine-status">
+                <Cpu size={14} className="gold-text" /> Engine: Stockfish 19 NNUE (Evaluasi Cepat & Akurat)
+              </span>
+            </div>
           </div>
         )}
 
         {/* Main Review Studio: Board on Left, Coach & Breakdown on Right */}
-        {!isAnalyzing && analysisResult && (
+        {hasMovesToDisplay && (
           <div className="chesscom-studio-body">
             {/* LEFT: Chess Board, Eval Bar, Graph, and Board Controls */}
             <div className="studio-board-column">
@@ -502,6 +835,85 @@ export const GameReviewModal = ({
                     );
                   })}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Floating Modal for Importing PGN Anytime */}
+        {showImportModal && (
+          <div className="import-pgn-overlay" onClick={() => setShowImportModal(false)}>
+            <div className="import-pgn-dialog" onClick={(e) => e.stopPropagation()}>
+              <div className="dialog-header">
+                <div className="dialog-title-group">
+                  <Layers size={20} className="gold-text" />
+                  <h3>Impor Permainan Baru (PGN)</h3>
+                </div>
+                <button
+                  className="review-close-icon-btn"
+                  onClick={() => setShowImportModal(false)}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="dialog-body">
+                <p className="dialog-subtext">
+                  Tempelkan notasi PGN dari Chess.com / Lichess atau pilih dari koleksi permainan master untuk dievaluasi oleh Stockfish 19 NNUE.
+                </p>
+
+                <textarea
+                  className="pgn-textarea dialog-textarea"
+                  value={pgnInput}
+                  onChange={(e) => {
+                    setPgnInput(e.target.value);
+                    if (pgnError) setPgnError('');
+                  }}
+                  placeholder="Tempelkan PGN di sini... (contoh: 1. e4 e5 2. Nf3 Nc6...)"
+                  rows={6}
+                />
+
+                {pgnError && (
+                  <div className="pgn-error-banner">
+                    <AlertOctagon size={16} />
+                    <span>{pgnError}</span>
+                  </div>
+                )}
+
+                <div className="dialog-quick-presets">
+                  <span className="presets-label">Atau coba game master legendaris:</span>
+                  <div className="presets-row">
+                    {SAMPLE_GAMES.map((sample) => (
+                      <button
+                        key={sample.id}
+                        type="button"
+                        className="preset-chip-btn"
+                        onClick={() => handleLoadSampleGame(sample)}
+                      >
+                        {sample.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="dialog-footer">
+                <button
+                  type="button"
+                  className="btn-dialog-cancel"
+                  onClick={() => setShowImportModal(false)}
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  className="btn-hub-analyze dialog-submit-btn"
+                  onClick={handleAnalyzePgnInput}
+                  disabled={!pgnInput.trim()}
+                >
+                  <Zap size={16} />
+                  <span>Mulai Analisis</span>
+                </button>
               </div>
             </div>
           </div>
